@@ -14,10 +14,9 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::Router;
-use sea_orm::entity::prelude::*;
 use sea_orm::{
-    ActiveModelTrait, ConnectOptions, ConnectionTrait, Database, DatabaseConnection, DbBackend, EntityTrait,
-    Schema, Set, Statement,
+    ActiveModelTrait, ConnectOptions, ConnectionTrait, Database, DatabaseConnection, DbBackend,
+    EntityTrait, Schema, Set, Statement,
 };
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
@@ -140,13 +139,11 @@ async fn discriminator_strategy_isolates_tenants() {
 
     let app = Router::new()
         .route("/products", get(discriminator_list_handler))
-        .layer(
-            TenantLayer::from_config(
-                &HttpTenantConfig::builder()
-                    .strategy(HttpTenantStrategy::Header)
-                    .build(),
-            ),
-        )
+        .layer(TenantLayer::from_config(
+            &HttpTenantConfig::builder()
+                .strategy(HttpTenantStrategy::Header)
+                .build(),
+        ))
         .with_state(provider);
 
     let base = serve(app).await;
@@ -198,10 +195,7 @@ async fn discriminator_list_handler(
 struct SimpleSchemaMapping;
 
 impl TenantSchemaMapping for SimpleSchemaMapping {
-    async fn schema_for(
-        &self,
-        tenant: &TenantId,
-    ) -> Result<String, tenant_core::TenantError> {
+    async fn schema_for(&self, tenant: &TenantId) -> Result<String, tenant_core::TenantError> {
         // Schema name = "tenant_<id>"
         Ok(format!("tenant_{}", tenant.as_str()))
     }
@@ -254,13 +248,11 @@ async fn schema_per_tenant_isolates_tenants() {
 
     let app = Router::new()
         .route("/products", get(schema_list_handler))
-        .layer(
-            TenantLayer::from_config(
-                &HttpTenantConfig::builder()
-                    .strategy(HttpTenantStrategy::Header)
-                    .build(),
-            ),
-        )
+        .layer(TenantLayer::from_config(
+            &HttpTenantConfig::builder()
+                .strategy(HttpTenantStrategy::Header)
+                .build(),
+        ))
         .with_state(provider);
 
     let base = serve(app).await;
@@ -311,10 +303,7 @@ struct TestDatabaseMapping {
 }
 
 impl TenantDatabaseMapping for TestDatabaseMapping {
-    async fn url_for(
-        &self,
-        tenant: &TenantId,
-    ) -> Result<String, tenant_core::TenantError> {
+    async fn url_for(&self, tenant: &TenantId) -> Result<String, tenant_core::TenantError> {
         Ok(format!(
             "postgres://postgres:postgres@127.0.0.1:{}/db_{}",
             self.host_port,
@@ -328,7 +317,7 @@ async fn database_per_tenant_isolates_tenants() {
     let (_container, url) = start_postgres().await;
     let host_port: u16 = url
         .split(':')
-        .last()
+        .next_back()
         .unwrap()
         .split('/')
         .next()
@@ -368,13 +357,11 @@ async fn database_per_tenant_isolates_tenants() {
 
     let app = Router::new()
         .route("/products", get(dbpertenant_list_handler))
-        .layer(
-            TenantLayer::from_config(
-                &HttpTenantConfig::builder()
-                    .strategy(HttpTenantStrategy::Header)
-                    .build(),
-            ),
-        )
+        .layer(TenantLayer::from_config(
+            &HttpTenantConfig::builder()
+                .strategy(HttpTenantStrategy::Header)
+                .build(),
+        ))
         .with_state(provider);
 
     let base = serve(app).await;
@@ -436,13 +423,11 @@ async fn discriminator_write_and_read_isolation() {
     let app = Router::new()
         .route("/products", get(discriminator_list_handler))
         .route("/products", post(discriminator_create_handler))
-        .layer(
-            TenantLayer::from_config(
-                &HttpTenantConfig::builder()
-                    .strategy(HttpTenantStrategy::Header)
-                    .build(),
-            ),
-        )
+        .layer(TenantLayer::from_config(
+            &HttpTenantConfig::builder()
+                .strategy(HttpTenantStrategy::Header)
+                .build(),
+        ))
         .with_state(provider);
 
     let base = serve(app).await;
@@ -521,23 +506,17 @@ async fn missing_tenant_header_returns_400() {
 
     let app = Router::new()
         .route("/products", get(discriminator_list_handler))
-        .layer(
-            TenantLayer::from_config(
-                &HttpTenantConfig::builder()
-                    .strategy(HttpTenantStrategy::Header)
-                    .build(),
-            ),
-        )
+        .layer(TenantLayer::from_config(
+            &HttpTenantConfig::builder()
+                .strategy(HttpTenantStrategy::Header)
+                .build(),
+        ))
         .with_state(provider);
 
     let base = serve(app).await;
     let client = reqwest::Client::new();
 
-    let resp = client
-        .get(format!("{base}/products"))
-        .send()
-        .await
-        .unwrap();
+    let resp = client.get(format!("{base}/products")).send().await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST.as_u16());
 }
 
@@ -553,14 +532,12 @@ async fn multi_strategy_header_and_query_with_db() {
 
     let app = Router::new()
         .route("/products", get(discriminator_list_handler))
-        .layer(
-            TenantLayer::from_config(
-                &HttpTenantConfig::builder()
-                    .strategy(HttpTenantStrategy::Header)
-                    .strategy(HttpTenantStrategy::Query)
-                    .build(),
-            ),
-        )
+        .layer(TenantLayer::from_config(
+            &HttpTenantConfig::builder()
+                .strategy(HttpTenantStrategy::Header)
+                .strategy(HttpTenantStrategy::Query)
+                .build(),
+        ))
         .with_state(provider);
 
     let base = serve(app).await;
@@ -603,14 +580,12 @@ async fn default_tenant_fallback_with_db() {
 
     let app = Router::new()
         .route("/products", get(discriminator_list_handler))
-        .layer(
-            TenantLayer::from_config(
-                &HttpTenantConfig::builder()
-                    .strategy(HttpTenantStrategy::Header)
-                    .default_tenant("public")
-                    .build(),
-            ),
-        )
+        .layer(TenantLayer::from_config(
+            &HttpTenantConfig::builder()
+                .strategy(HttpTenantStrategy::Header)
+                .default_tenant("public")
+                .build(),
+        ))
         .with_state(provider);
 
     let base = serve(app).await;
@@ -633,7 +608,7 @@ async fn database_per_tenant_caches_connections() {
     let (_container, url) = start_postgres().await;
     let host_port: u16 = url
         .split(':')
-        .last()
+        .next_back()
         .unwrap()
         .split('/')
         .next()

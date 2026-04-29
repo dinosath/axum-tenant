@@ -16,11 +16,15 @@ pub mod config;
 pub mod context;
 pub mod extractor;
 pub mod middleware;
+#[cfg(feature = "oidc")]
+pub mod oidc;
 pub mod resolver;
 
 pub use context::HttpResolutionContext;
 pub use extractor::{CurrentTenant, TenantRejection};
 pub use middleware::TenantLayer;
+#[cfg(feature = "oidc")]
+pub use oidc::OidcTenantResolver;
 pub use resolver::{
     CookieTenantResolver, DefaultTenantResolver, HeaderTenantResolver, JwtTenantResolver,
     PathTenantResolver, QueryParamTenantResolver, SubdomainTenantResolver,

@@ -271,14 +271,10 @@ fn composite_all_none_returns_none() {
 fn composite_implements_tenant_resolver_trait() {
     // CompositeTenantResolver itself implements TenantResolver, so it can be
     // nested inside another composite.
-    let inner = CompositeTenantResolver::new()
-        .add(FixedResolver(TenantId::new("nested").unwrap()));
+    let inner = CompositeTenantResolver::new().add(FixedResolver(TenantId::new("nested").unwrap()));
     let outer = CompositeTenantResolver::new().add(inner);
     let ctx = MockContext::empty();
-    assert_eq!(
-        outer.resolve(&ctx).unwrap().unwrap().as_str(),
-        "nested"
-    );
+    assert_eq!(outer.resolve(&ctx).unwrap().unwrap().as_str(), "nested");
 }
 
 // ─── TenantConfig ────────────────────────────────────────────────────

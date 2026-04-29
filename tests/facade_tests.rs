@@ -7,8 +7,9 @@ use tower::ServiceExt;
 /// Tests that the top-level `axum-tenant` crate correctly re-exports
 /// everything from tenant-core, tenant-axum, and tenant-sea-orm through
 /// the feature-gated facade modules.
-
-async fn handler(axum_tenant::axum::CurrentTenant(tenant): axum_tenant::axum::CurrentTenant) -> String {
+async fn handler(
+    axum_tenant::axum::CurrentTenant(tenant): axum_tenant::axum::CurrentTenant,
+) -> String {
     format!("tenant:{}", tenant)
 }
 

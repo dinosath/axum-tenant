@@ -8,7 +8,10 @@ use tenant_core::tenant::TenantId;
 
 /// Resolves a tenant to a database schema name.
 pub trait TenantSchemaMapping: Send + Sync + 'static {
-    fn schema_for(&self, tenant: &TenantId) -> impl Future<Output = Result<String, TenantError>> + Send;
+    fn schema_for(
+        &self,
+        tenant: &TenantId,
+    ) -> impl Future<Output = Result<String, TenantError>> + Send;
 }
 
 /// Schema-per-tenant strategy: all tenants share a database, each gets its
@@ -20,10 +23,7 @@ pub struct SchemaPerTenantProvider<M: TenantSchemaMapping> {
 }
 
 impl<M: TenantSchemaMapping> SchemaPerTenantProvider<M> {
-    pub fn new(
-        shared_connection: DatabaseConnection,
-        mapping: M,
-    ) -> Self {
+    pub fn new(shared_connection: DatabaseConnection, mapping: M) -> Self {
         Self {
             shared_connection,
             mapping,

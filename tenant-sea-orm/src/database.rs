@@ -12,7 +12,10 @@ use tenant_core::tenant::TenantId;
 /// master database, config file, etc.).
 pub trait TenantDatabaseMapping: Send + Sync + 'static {
     /// Return the database URL for the given tenant.
-    fn url_for(&self, tenant: &TenantId) -> impl Future<Output = Result<String, TenantError>> + Send;
+    fn url_for(
+        &self,
+        tenant: &TenantId,
+    ) -> impl Future<Output = Result<String, TenantError>> + Send;
 }
 
 /// Database-per-tenant strategy: each tenant has its own database.

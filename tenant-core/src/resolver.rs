@@ -76,6 +76,7 @@ impl CompositeTenantResolver {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn add(mut self, resolver: impl TenantResolver) -> Self {
         self.resolvers.push(Box::new(resolver));
         self

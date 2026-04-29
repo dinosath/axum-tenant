@@ -1,0 +1,23 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+  - repo: local
+    hooks:
+      - id: rust-fmt
+        name: rust-fmt
+        entry: cargo fmt --all
+        language: system
+        files: ^(.*)\.rs$
+        pass_filenames: false
+      - id: rust-clippy
+        name: rust-clippy
+        entry: cargo clippy --all --exclude ferriskey-client -- -D warnings
+        language: system
+        files: ^(.*)\.rs|Cargo\.(toml|lock)$
+        pass_filenames: false

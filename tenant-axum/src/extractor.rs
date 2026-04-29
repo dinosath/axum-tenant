@@ -65,6 +65,6 @@ where
             .get::<TenantId>()
             .cloned()
             .map(CurrentTenant)
-            .ok_or_else(|| TenantRejection(TenantError::MissingTenant))
+            .ok_or(TenantRejection(TenantError::MissingTenant))
     }
 }

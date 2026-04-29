@@ -1,5 +1,8 @@
 # axum-tenant
 
+[![CI](https://github.com/dinosath/axum-tenant/actions/workflows/ci.yml/badge.svg)](https://github.com/dinosath/axum-tenant/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/dinosath/axum-tenant/branch/main/graph/badge.svg)](https://codecov.io/gh/dinosath/axum-tenant)
+
 A modular multi-tenancy framework for Rust
 ## Architecture
 
@@ -236,7 +239,7 @@ impl TenantResolver for JwtTenantResolver {
             .ok_or(TenantError::MissingTenant)?
             .to_str()
             .map_err(|_| TenantError::InvalidTenant("bad header".into()))?;
-        
+
         // Decode JWT, extract tenant claim...
         let tenant_id = extract_tenant_from_jwt(auth)?;
         TenantId::new(tenant_id).ok_or(TenantError::MissingTenant)

@@ -227,9 +227,11 @@ impl TenantResolver for CookieTenantResolver {
 
 /// Resolves tenant from a JWT Bearer token claim.
 ///
-/// Decodes the JWT payload (base64) **without verifying the signature** —
-/// signature verification is expected to happen in a prior authentication
-/// middleware. The resolver extracts the configured claim from the payload.
+/// Decodes the JWT payload and extracts the configured claim. By default,
+/// signature verification is **disabled** (the assumption is that a prior
+/// authentication middleware has already verified the token). Use
+/// [`JwtTenantResolver::with_validation`] to supply custom validation
+/// (e.g. with a decoding key for signature verification).
 ///
 /// Corresponds to the `Jwt` strategy in `HttpTenantConfig`.
 ///
@@ -237,12 +239,31 @@ impl TenantResolver for CookieTenantResolver {
 #[derive(Debug, Clone)]
 pub struct JwtTenantResolver {
     claim_name: String,
+    validation: jsonwebtoken::Validation,
 }
 
 impl JwtTenantResolver {
     pub fn new(claim_name: impl Into<String>) -> Self {
+        let mut validation = jsonwebtoken::Validation::default();
+        validation.insecure_disable_signature_validation();
+        validation.validate_aud = false;
+        validation.validate_exp = false;
+        validation.required_spec_claims.clear();
         Self {
             claim_name: claim_name.into(),
+            validation,
+        }
+    }
+
+    /// Create a resolver with custom `jsonwebtoken::Validation` settings.
+    /// Useful for enabling signature verification, audience checks, etc.
+    pub fn with_validation(
+        claim_name: impl Into<String>,
+        validation: jsonwebtoken::Validation,
+    ) -> Self {
+        Self {
+            claim_name: claim_name.into(),
+            validation,
         }
     }
 }
@@ -259,23 +280,24 @@ impl TenantResolver for JwtTenantResolver {
             Some(a) => a,
             None => return Ok(None),
         };
-        let token = match auth.strip_prefix("Bearer ").or_else(|| auth.strip_prefix("bearer ")) {
+        let token = match auth
+            .strip_prefix("Bearer ")
+            .or_else(|| auth.strip_prefix("bearer "))
+        {
             Some(t) => t.trim(),
             None => return Ok(None),
         };
-        // JWT has 3 parts: header.payload.signature
-        let parts: Vec<&str> = token.split('.').collect();
-        if parts.len() != 3 {
-            return Ok(None);
-        }
-        let payload = parts[1];
-        // Decode base64url → JSON
-        let decoded = base64url_decode(payload).map_err(|e| {
-            TenantError::InvalidTenant(format!("Failed to decode JWT payload: {e}"))
-        })?;
-        // Simple JSON value extraction without pulling in serde_json as a dep.
-        // Look for `"claim_name":"value"` or `"claim_name": "value"`.
-        let claim_value = extract_json_string_value(&decoded, &self.claim_name);
+
+        let key = jsonwebtoken::DecodingKey::from_secret(&[]);
+        let token_data: jsonwebtoken::TokenData<serde_json::Value> =
+            jsonwebtoken::decode(token, &key, &self.validation)
+                .map_err(|e| TenantError::InvalidTenant(format!("Failed to decode JWT: {e}")))?;
+
+        let claim_value = token_data.claims.get(&self.claim_name).map(|v| match v {
+            serde_json::Value::String(s) => s.clone(),
+            other => other.to_string(),
+        });
+
         match claim_value {
             Some(v) => Ok(TenantId::new(v)),
             None => Ok(None),
@@ -285,62 +307,4 @@ impl TenantResolver for JwtTenantResolver {
     fn name(&self) -> &str {
         "JwtTenantResolver"
     }
-}
-
-/// Minimal base64url decoder (no padding required).
-fn base64url_decode(input: &str) -> Result<String, String> {
-    // Replace URL-safe chars with standard base64 chars
-    let mut b64 = input.replace('-', "+").replace('_', "/");
-    // Add padding
-    match b64.len() % 4 {
-        2 => b64.push_str("=="),
-        3 => b64.push('='),
-        0 => {}
-        _ => return Err("Invalid base64url length".into()),
-    }
-    // Decode
-    let bytes = base64_decode_simple(&b64)?;
-    String::from_utf8(bytes).map_err(|e| e.to_string())
-}
-
-/// Minimal base64 decoder (no external crate).
-fn base64_decode_simple(input: &str) -> Result<Vec<u8>, String> {
-    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut output = Vec::with_capacity(input.len() * 3 / 4);
-    let mut buf: u32 = 0;
-    let mut bits: u32 = 0;
-    for &byte in input.as_bytes() {
-        if byte == b'=' {
-            break;
-        }
-        let val = TABLE
-            .iter()
-            .position(|&c| c == byte)
-            .ok_or_else(|| format!("Invalid base64 character: {}", byte as char))?
-            as u32;
-        buf = (buf << 6) | val;
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            output.push((buf >> bits) as u8);
-            buf &= (1 << bits) - 1;
-        }
-    }
-    Ok(output)
-}
-
-/// Extract a string value from a JSON object string by key.
-/// Very simple parser — handles `"key":"value"` and `"key": "value"`.
-fn extract_json_string_value(json: &str, key: &str) -> Option<String> {
-    let search = format!("\"{}\"", key);
-    let idx = json.find(&search)?;
-    let rest = &json[idx + search.len()..];
-    // Skip optional whitespace and colon
-    let rest = rest.trim_start();
-    let rest = rest.strip_prefix(':')?;
-    let rest = rest.trim_start();
-    // Expect a quoted string value
-    let rest = rest.strip_prefix('"')?;
-    let end = rest.find('"')?;
-    Some(rest[..end].to_string())
 }

@@ -25,10 +25,7 @@ impl<'a> ResolutionContext for HttpResolutionContext<'a> {
     // Typed access is available through header()/path() instead.
 
     fn header(&self, name: &str) -> Option<&str> {
-        self.parts
-            .headers
-            .get(name)
-            .and_then(|v| v.to_str().ok())
+        self.parts.headers.get(name).and_then(|v| v.to_str().ok())
     }
 
     fn path(&self) -> Option<&str> {

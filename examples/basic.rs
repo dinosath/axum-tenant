@@ -10,7 +10,6 @@ use tenant_axum::{
     config::{HttpTenantConfig, HttpTenantStrategy},
     CurrentTenant, TenantLayer,
 };
-use tracing_subscriber;
 
 async fn hello(CurrentTenant(tenant): CurrentTenant) -> String {
     format!("Hello from tenant: {tenant}")

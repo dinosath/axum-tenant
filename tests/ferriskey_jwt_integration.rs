@@ -46,9 +46,7 @@ async fn remove_docker_network(name: &str) {
 }
 
 /// Start a Postgres container configured for FerrisKey on the given network.
-async fn start_ferriskey_postgres(
-    network: &str,
-) -> (ContainerAsync<Postgres>, u16) {
+async fn start_ferriskey_postgres(network: &str) -> (ContainerAsync<Postgres>, u16) {
     let container = Postgres::default()
         .with_db_name("ferriskey")
         .with_user("ferriskey")
@@ -75,7 +73,12 @@ async fn container_ip_on_network(container_id: &str, network: &str) -> String {
         .await
         .expect("failed to inspect container");
     let ip = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    assert!(!ip.is_empty(), "container {} has no IP on network {}", container_id, network);
+    assert!(
+        !ip.is_empty(),
+        "container {} has no IP on network {}",
+        container_id,
+        network
+    );
     ip
 }
 
@@ -85,10 +88,7 @@ async fn container_ip_on_network(container_id: &str, network: &str) -> String {
 /// migration files.  The container connects to Postgres via the network IP so
 /// both containers communicate over the custom Docker network.
 async fn run_ferriskey_migrations(pg_ip: &str, network: &str) {
-    let db_url = format!(
-        "postgresql://ferriskey:ferriskey@{}:5432/ferriskey",
-        pg_ip
-    );
+    let db_url = format!("postgresql://ferriskey:ferriskey@{}:5432/ferriskey", pg_ip);
 
     // Retry a few times in case Postgres is not yet accepting connections.
     let mut last_output = None;
@@ -134,10 +134,7 @@ async fn run_ferriskey_migrations(pg_ip: &str, network: &str) {
 ///
 /// The API listens on port 3333 (configurable via `SERVER_PORT`).
 /// We wait for the `"listening on"` log line on stderr before returning.
-async fn start_ferriskey_api(
-    pg_ip: &str,
-    network: &str,
-) -> (ContainerAsync<GenericImage>, u16) {
+async fn start_ferriskey_api(pg_ip: &str, network: &str) -> (ContainerAsync<GenericImage>, u16) {
     let container = GenericImage::new("ghcr.io/ferriskey/ferriskey-api", "latest")
         .with_exposed_port(3333.tcp())
         .with_wait_for(WaitFor::message_on_stderr("listening on"))
@@ -373,9 +370,7 @@ async fn jwt_missing_bearer_returns_400() {
 
     let app_base = serve(app).await;
 
-    let resp = reqwest::get(format!("{}/whoami", app_base))
-        .await
-        .unwrap();
+    let resp = reqwest::get(format!("{}/whoami", app_base)).await.unwrap();
 
     assert_eq!(resp.status().as_u16(), 400, "expected 400 for missing JWT");
 }

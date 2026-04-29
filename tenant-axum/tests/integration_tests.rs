@@ -37,7 +37,9 @@ async fn header_resolver_resolves_tenant() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:acme");
 }
 
@@ -58,7 +60,9 @@ async fn header_resolver_custom_header_name() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:corp");
 }
 
@@ -94,7 +98,9 @@ async fn cookie_resolver_resolves_tenant() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:acme");
 }
 
@@ -115,7 +121,9 @@ async fn cookie_resolver_custom_name() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:corp");
 }
 
@@ -155,38 +163,19 @@ async fn cookie_resolver_no_cookie_header() {
 
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
-/// Build a minimal JWT with the given payload JSON (no signature verification).
+/// Build a minimal HS256-signed JWT with the given payload JSON.
+/// Uses a fixed test secret key (signature verification is disabled by default
+/// in JwtTenantResolver, so the key value doesn't matter for claim extraction).
 fn make_jwt(payload_json: &str) -> String {
-    fn base64url_encode(data: &[u8]) -> String {
-        // Minimal base64url encoder
-        const TABLE: &[u8; 64] =
-            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        let mut result = Vec::new();
-        let mut bits: u32 = 0;
-        let mut nbits: u32 = 0;
-        for &byte in data {
-            bits = (bits << 8) | byte as u32;
-            nbits += 8;
-            while nbits >= 6 {
-                nbits -= 6;
-                result.push(TABLE[((bits >> nbits) & 0x3f) as usize]);
-            }
-        }
-        if nbits > 0 {
-            bits <<= 6 - nbits;
-            result.push(TABLE[(bits & 0x3f) as usize]);
-        }
-        let mut s = String::from_utf8(result).unwrap();
-        // Convert to URL-safe
-        s = s.replace('+', "-").replace('/', "_");
-        // Strip padding
-        s.trim_end_matches('=').to_string()
-    }
+    use jsonwebtoken::{encode, EncodingKey, Header};
 
-    let header = base64url_encode(b"{\"alg\":\"none\",\"typ\":\"JWT\"}");
-    let payload = base64url_encode(payload_json.as_bytes());
-    let signature = base64url_encode(b"fakesig");
-    format!("{}.{}.{}", header, payload, signature)
+    let claims: serde_json::Value = serde_json::from_str(payload_json).unwrap();
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(b"test-secret"),
+    )
+    .unwrap()
 }
 
 #[tokio::test]
@@ -207,7 +196,9 @@ async fn jwt_resolver_resolves_tenant_from_claim() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:acme");
 }
 
@@ -229,7 +220,9 @@ async fn jwt_resolver_custom_claim_name() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:corp");
 }
 
@@ -324,7 +317,9 @@ async fn path_resolver_resolves_first_segment() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:acme");
 }
 
@@ -347,7 +342,9 @@ async fn path_resolver_custom_segment_index() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:corp");
 }
 #[tokio::test]
@@ -366,7 +363,9 @@ async fn query_resolver_resolves_tenant() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:acme");
 }
 
@@ -386,7 +385,9 @@ async fn query_resolver_custom_param() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:corp");
 }
 
@@ -424,7 +425,9 @@ async fn subdomain_resolver_resolves_tenant() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:acme");
 }
 
@@ -445,7 +448,9 @@ async fn subdomain_resolver_strips_port() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:corp");
 }
 #[tokio::test]
@@ -467,7 +472,9 @@ async fn default_resolver_provides_fallback() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:public");
 }
 
@@ -490,7 +497,9 @@ async fn default_resolver_not_used_when_header_present() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:acme");
 }
 
@@ -515,7 +524,9 @@ async fn composite_header_then_cookie_uses_header_first() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:from-header");
 }
 
@@ -538,7 +549,9 @@ async fn composite_falls_through_to_cookie_when_no_header() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:from-cookie");
 }
 #[tokio::test]
@@ -562,7 +575,9 @@ async fn config_driven_header_strategy() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:acme");
 }
 
@@ -588,7 +603,9 @@ async fn config_driven_multi_strategy_with_fallback() {
         )
         .await
         .unwrap();
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:from-header");
 
     // 2) No header, cookie present → resolves from cookie
@@ -603,7 +620,9 @@ async fn config_driven_multi_strategy_with_fallback() {
         )
         .await
         .unwrap();
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:from-cookie");
 
     // 3) Nothing → falls back to default
@@ -616,7 +635,9 @@ async fn config_driven_multi_strategy_with_fallback() {
         )
         .await
         .unwrap();
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:public");
 }
 
@@ -642,7 +663,9 @@ async fn config_driven_jwt_strategy() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:acme-corp");
 }
 
@@ -667,7 +690,9 @@ async fn config_driven_cookie_strategy() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:acme");
 }
 
@@ -691,7 +716,9 @@ async fn config_driven_query_strategy() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:acme");
 }
 
@@ -715,7 +742,9 @@ async fn config_driven_path_strategy() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:acme");
 }
 
@@ -739,7 +768,9 @@ async fn config_driven_subdomain_strategy() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:acme");
 }
 
@@ -763,7 +794,9 @@ async fn config_default_returns_header_strategy() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:acme");
 }
 #[test]
@@ -847,12 +880,12 @@ async fn rejection_missing_tenant_is_400() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
-    assert!(
-        std::str::from_utf8(&body)
-            .unwrap()
-            .contains("No tenant identifier")
-    );
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert!(std::str::from_utf8(&body)
+        .unwrap()
+        .contains("No tenant identifier"));
 }
 #[tokio::test]
 async fn different_tenants_isolated() {
@@ -873,7 +906,9 @@ async fn different_tenants_isolated() {
         )
         .await
         .unwrap();
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:tenant-a");
 
     // Tenant B — same app, different tenant
@@ -887,6 +922,8 @@ async fn different_tenants_isolated() {
         )
         .await
         .unwrap();
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "tenant:tenant-b");
 }
