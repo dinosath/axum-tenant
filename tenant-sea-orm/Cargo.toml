@@ -1,0 +1,12 @@
+[package]
+name = "tenant-sea-orm"
+version = "0.1.0"
+edition = "2021"
+description = "SeaORM integration for tenant-core — connection providers and tenant-aware query filtering"
+license = "MIT"
+
+[dependencies]
+tenant-core = { path = "../tenant-core" }
+sea-orm = { version = "1", features = ["runtime-tokio-rustls"] }
+dashmap = "6"
+tracing = "0.1"

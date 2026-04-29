@@ -1,0 +1,50 @@
+[workspace]
+members = [
+    "tenant-core",
+    "tenant-axum",
+    "tenant-sea-orm",
+]
+
+[package]
+name = "axum-tenant"
+version = "0.1.0"
+edition = "2021"
+description = "Multi-tenancy crate for Rust — core traits, Axum middleware, and SeaORM integration"
+license = "MIT"
+keywords = ["multi-tenancy", "axum", "sea-orm", "saas"]
+categories = ["web-programming", "database"]
+
+[features]
+default = ["axum", "sea-orm"]
+axum = ["dep:tenant-axum"]
+sea-orm = ["dep:tenant-sea-orm"]
+full = ["axum", "sea-orm"]
+
+[dependencies]
+tenant-core = { path = "tenant-core" }
+tenant-axum = { path = "tenant-axum", optional = true }
+tenant-sea-orm = { path = "tenant-sea-orm", optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+tracing-subscriber = "0.3"
+axum = "0.8"
+sea-orm = { version = "1", features = ["runtime-tokio-rustls", "sqlx-postgres"] }
+tenant-axum = { path = "tenant-axum" }
+tenant-sea-orm = { path = "tenant-sea-orm" }
+tower = { version = "0.5", features = ["util"] }
+testcontainers = "0.27"
+testcontainers-modules = { version = "0.15", features = ["postgres"] }
+reqwest = { version = "0.13", features = ["json", "form"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[[example]]
+name = "basic"
+path = "examples/basic.rs"
+required-features = ["axum"]
+
+[[example]]
+name = "discriminator"
+path = "examples/discriminator.rs"
+required-features = ["axum", "sea-orm"]
