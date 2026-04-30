@@ -8,11 +8,14 @@ members = [
 [package]
 name = "axum-tenant"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Multi-tenancy crate for Rust — core traits, Axum middleware, and SeaORM integration"
 license = "MIT"
-keywords = ["multi-tenancy", "axum", "sea-orm", "saas"]
+keywords = ["multi-tenancy", "axum", "sea-orm", "saas", "tenant"]
 categories = ["web-programming", "database"]
+repository = "https://github.com/dinosath/axum-tenant"
+homepage = "https://github.com/dinosath/axum-tenant"
+readme = "README.md"
 
 [features]
 default = ["axum", "sea-orm"]

@@ -3,10 +3,11 @@
 [![CI](https://github.com/dinosath/axum-tenant/actions/workflows/ci.yml/badge.svg)](https://github.com/dinosath/axum-tenant/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/dinosath/axum-tenant/branch/main/graph/badge.svg)](https://codecov.io/gh/dinosath/axum-tenant)
 
-A modular multi-tenancy framework for Rust
+A modular multi-tenancy framework for Rust built on **Axum** and **SeaORM**.
+
 ## Architecture
 
-```
+```text
 axum-tenant (facade crate — feature-gated re-exports)
 ├── tenant-core       Core traits & types — framework agnostic
 ├── tenant-axum       Axum integration — HTTP resolvers, Tower middleware, extractors
@@ -19,11 +20,36 @@ axum-tenant (facade crate — feature-gated re-exports)
 | `tenant-axum` | `HeaderTenantResolver`, `PathTenantResolver`, `SubdomainTenantResolver`, `TenantLayer`, `CurrentTenant` |
 | `tenant-sea-orm` | `TenantConnectionProvider`, `DatabasePerTenantProvider`, `SchemaPerTenantProvider`, `DiscriminatorProvider`, `TenantFilter` |
 
+```text
+┌─────────────────────────────────────────────┐
+│              Axum HTTP Request               │
+└──────────────────┬──────────────────────────┘
+                   │
+         ┌─────────▼──────────┐
+         │    TenantLayer     │  ← Tower middleware
+         │  (TenantResolver)  │
+         └─────────┬──────────┘
+                   │ extracts TenantId
+         ┌─────────▼───────────────────┐
+         │  TenantConnectionProvider   │  ← provides DB conn
+         └─────────┬───────────────────┘
+                   │
+    ┌──────────────┼──────────────┐
+    │              │              │
+    ▼              ▼              ▼
+ Database       Schema      Discriminator
+ Provider      Provider      Provider
+ (per-tenant   (SET SCHEMA)  (shared conn
+  conn pool)                 + TenantFilter)
+```
+
 ## Multi-Tenancy Strategies
 
-- **Database per tenant** — each tenant gets its own database; connections are cached.
-- **Schema per tenant** — shared database, each tenant gets its own schema (`SET search_path`).
-- **Discriminator (shared table)** — all tenants share the same tables; data isolation via `WHERE tenant_id = ?`.
+| Strategy | Isolation | Description |
+|---|---|---|
+| **Database** | Strongest | Each tenant gets its own database |
+| **Schema** | Strong | Each tenant gets its own schema in a shared DB |
+| **Discriminator** | Application-level | All tenants share tables; rows separated by `tenant_id` column |
 
 ## Quick Start
 
@@ -41,7 +67,7 @@ tenant-axum = "0.1"
 tenant-sea-orm = "0.1"
 ```
 
-### Example — header-based tenant resolution
+### Header-Based Tenant Resolution (simplest)
 
 ```rust
 use axum::{routing::get, Router};
@@ -72,96 +98,33 @@ curl -H "X-Tenant-Id: acme" http://localhost:3000/hello
 # → Hello, tenant acme
 ```
 
-## Features
-
-| Feature | Default | Description |
-|---|---|---|
-| `axum` | ✓ | Axum middleware, extractors, HTTP resolvers |
-| `sea-orm` | ✓ | SeaORM connection providers and query filtering |
-| `full` | | Enables all features |
-
-## License
-
-MIT
-
-A multi-tenancy crate for Rust built on **Axum** and **SeaORM**.
-
-## Multi-Tenancy Strategies
-
-| Strategy | Isolation |  Description |
-|---|---|---|---|
-| **Database** | Strongest | Each tenant gets its own database |
-| **Schema** | Strong | Each tenant gets its own schema in a shared DB |
-| **Discriminator** | Application-level | All tenants share tables; rows separated by `tenant_id` column |
-
-## Architecture
-
-```text
-┌─────────────────────────────────────────────┐
-│              Axum HTTP Request               │
-└──────────────────┬──────────────────────────┘
-                   │
-         ┌─────────▼──────────┐
-         │    TenantLayer     │  ← Tower middleware
-         │  (TenantResolver)  │
-         └─────────┬──────────┘
-                   │ extracts TenantId
-         ┌─────────▼───────────────────┐
-         │  TenantConnectionProvider   │  ← provides DB conn
-         └─────────┬───────────────────┘
-                   │
-    ┌──────────────┼──────────────┐
-    │              │              │
-    ▼              ▼              ▼
- Database       Schema      Discriminator
- Provider      Provider      Provider
- (per-tenant   (SET SCHEMA)  (shared conn
-  conn pool)                 + TenantFilter)
-```
-
-## Quick Start
-
-Add to your `Cargo.toml`:
-
-```toml
-[dependencies]
-axum-tenant = { path = "." }
-axum = "0.8"
-sea-orm = { version = "1", features = ["runtime-tokio-rustls", "sqlx-postgres"] }
-tokio = { version = "1", features = ["full"] }
-```
-
-### 1. Header-Based Tenant Resolution (simplest)
+### Config-Driven Resolution
 
 ```rust
-use axum::{Router, routing::get};
-use axum_tenant::{TenantLayer, HeaderTenantResolver, CurrentTenant};
+use tenant_axum::config::{HttpTenantConfig, HttpTenantStrategy};
+use tenant_axum::TenantLayer;
 
-async fn handler(CurrentTenant(tenant): CurrentTenant) -> String {
-    format!("Hello, tenant {tenant}")
-}
+let config = HttpTenantConfig::builder()
+    .strategy(HttpTenantStrategy::Header)
+    .strategy(HttpTenantStrategy::Cookie)
+    .default_tenant("public")
+    .build();
 
 let app = Router::new()
-    .route("/api/resource", get(handler))
-    .layer(TenantLayer::new(HeaderTenantResolver::default()));
-// Expects header: X-Tenant-Id: <tenant>
+    .route("/hello", get(handler))
+    .layer(TenantLayer::from_config(&config));
 ```
 
-### 2. Database-per-Tenant Strategy
+### Database-per-Tenant Strategy
 
 ```rust
-use axum_tenant::{
-    TenantLayer, HeaderTenantResolver, TenantDb,
-    sea_orm::DatabasePerTenantProvider,
-};
-use axum_tenant::sea_orm::database::TenantDatabaseMapping;
-use axum_tenant::{TenantId, TenantError};
+use tenant_sea_orm::{DatabasePerTenantProvider, TenantDatabaseMapping};
+use tenant_core::{TenantId, TenantError};
 
 struct MyMapping;
 
 impl TenantDatabaseMapping for MyMapping {
     async fn url_for(&self, tenant: &TenantId) -> Result<String, TenantError> {
-        // Look up from master DB, config, etc.
         Ok(format!("postgres://user:pass@localhost/{}", tenant.as_str()))
     }
 }
@@ -170,19 +133,12 @@ let provider = DatabasePerTenantProvider::new(
     "postgres://user:pass@localhost/master",
     MyMapping,
 );
-
-let app = Router::new()
-    .route("/api/resource", get(handler))
-    .layer(TenantLayer::with_connection_provider(
-        HeaderTenantResolver::default(),
-        provider,
-    ));
 ```
 
-### 3. Schema-per-Tenant Strategy
+### Schema-per-Tenant Strategy
 
 ```rust
-use axum_tenant::sea_orm::{SchemaPerTenantProvider, schema::TenantSchemaMapping};
+use tenant_sea_orm::{SchemaPerTenantProvider, TenantSchemaMapping};
 
 struct MySchemaMapping;
 
@@ -192,27 +148,24 @@ impl TenantSchemaMapping for MySchemaMapping {
     }
 }
 
-let provider = SchemaPerTenantProvider::new(db_connection, MySchemaMapping);
+let provider = SchemaPerTenantProvider::with_url(
+    "postgres://user:pass@localhost/shared_db",
+    db_connection,
+    MySchemaMapping,
+);
 ```
 
-### 4. Discriminator Strategy (Shared Database)
+### Discriminator Strategy (Shared Database)
 
 ```rust
-use axum_tenant::sea_orm::{DiscriminatorProvider, TenantFilter};
+use tenant_sea_orm::{DiscriminatorProvider, TenantFilter, TenantAware};
 
-// Connection provider: just wraps the shared connection
 let provider = DiscriminatorProvider::new(db_connection);
 
 // In your handlers, filter queries:
-async fn list_products(
-    CurrentTenant(tenant): CurrentTenant,
-    TenantDb(db): TenantDb,
-) -> Result<Json<Vec<product::Model>>, TenantError> {
-    let products = TenantFilter::filter(Product::find(), &tenant)
-        .all(&db)
-        .await?;
-    Ok(Json(products))
-}
+let products = TenantFilter::filter(Product::find(), &tenant)
+    .all(&db)
+    .await?;
 ```
 
 ## Tenant Resolvers
@@ -221,41 +174,18 @@ async fn list_products(
 |---|---|---|
 | `HeaderTenantResolver` | HTTP header (default: `X-Tenant-Id`) | `curl -H "X-Tenant-Id: acme" ...` |
 | `PathTenantResolver` | URL path segment | `/acme/api/resource` |
-| `SubdomainTenantResolver` | Host subdomain | `acme.example.com` |
+| `SubdomainTenantResolver` | Host subdomain (requires ≥3 segments) | `acme.example.com` |
 | `QueryParamTenantResolver` | Query parameter (default: `tenant_id`) | `?tenant_id=acme` |
-
-### Custom Resolver
-
-```rust
-use axum_tenant::{TenantResolver, TenantId, TenantError};
-use http::request::Parts;
-
-struct JwtTenantResolver;
-
-impl TenantResolver for JwtTenantResolver {
-    async fn resolve(&self, parts: &Parts) -> Result<TenantId, TenantError> {
-        let auth = parts.headers
-            .get("Authorization")
-            .ok_or(TenantError::MissingTenant)?
-            .to_str()
-            .map_err(|_| TenantError::InvalidTenant("bad header".into()))?;
-
-        // Decode JWT, extract tenant claim...
-        let tenant_id = extract_tenant_from_jwt(auth)?;
-        TenantId::new(tenant_id).ok_or(TenantError::MissingTenant)
-    }
-}
-```
+| `CookieTenantResolver` | Cookie (default: `tenant_cookie`) | `Cookie: tenant_cookie=acme` |
+| `JwtTenantResolver` | JWT Bearer token claim | `Authorization: Bearer <jwt>` |
+| `DefaultTenantResolver` | Hardcoded fallback | Always returns configured value |
 
 ## SeaORM Entity Integration (Discriminator)
 
-Make your entities tenant-aware by implementing the `TenantAware` trait:
-
 ```rust
 use sea_orm::entity::prelude::*;
-use axum_tenant::sea_orm::TenantFilter;
+use tenant_sea_orm::{TenantAware, TenantFilter};
 
-// Your SeaORM entity must have a tenant_id column
 #[derive(Clone, Debug, DeriveEntityModel)]
 #[sea_orm(table_name = "product")]
 pub struct Model {
@@ -265,17 +195,12 @@ pub struct Model {
     pub name: String,
 }
 
-// Implement TenantAware to enable TenantFilter
-impl axum_tenant::sea_orm::filter::TenantAware for Entity {
+impl TenantAware for Entity {
     fn tenant_column() -> Column {
         Column::TenantId
     }
 }
-```
 
-Then use `TenantFilter` in queries:
-
-```rust
 // SELECT * FROM product WHERE tenant_id = 'acme'
 let products = TenantFilter::filter(Entity::find(), &tenant)
     .all(&db)
@@ -292,15 +217,20 @@ let products = TenantFilter::filter(Entity::find(), &tenant)
 | `TenantContext` (ThreadLocal) | `TenantId` in Axum request extensions |
 | `@TenantId` / `TenantAware` | `TenantAware` trait on SeaORM entities |
 | Hibernate Filter | `TenantFilter::filter()` |
-| `AbstractBaseEntity` | `TenantAware` trait |
 | Servlet Filter (setting tenant) | `TenantLayer` / `TenantMiddleware` |
-| `@PrePersist` listener | Set `tenant_id` field before `ActiveModel::insert()` |
 
-## Running the Example
+## Features
+
+| Feature | Default | Description |
+|---|---|---|
+| `axum` | ✓ | Axum middleware, extractors, HTTP resolvers |
+| `sea-orm` | ✓ | SeaORM connection providers and query filtering |
+| `full` | | Enables all features |
+
+## Running the Examples
 
 ```bash
-cargo run --example basic
-# In another terminal:
+cargo run --example basic --features axum
 curl -H "X-Tenant-Id: acme" http://localhost:3000/hello
 # → Hello from tenant: acme
 ```

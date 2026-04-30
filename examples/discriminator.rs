@@ -4,7 +4,7 @@
 //! NOTE: This is a structural example — it demonstrates the API surface
 //! without requiring a real database at compile time.
 
-use axum::{routing::get, Router};
+use axum::{Router, routing::get};
 use tenant_axum::config::HttpTenantConfig;
 use tenant_axum::{CurrentTenant, TenantLayer};
 use tenant_sea_orm::TenantFilter;

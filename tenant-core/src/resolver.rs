@@ -1,6 +1,8 @@
 use crate::error::TenantError;
 use crate::tenant::TenantId;
 use std::any::{Any, TypeId};
+use std::future::Future;
+use std::pin::Pin;
 
 /// Framework-agnostic resolution context.
 ///
@@ -108,5 +110,62 @@ impl TenantResolver for CompositeTenantResolver {
 
     fn name(&self) -> &str {
         "CompositeTenantResolver"
+    }
+}
+
+// ─── Async TenantResolver ────────────────────────────────────────────
+
+/// Async variant of [`TenantResolver`] for resolvers that require async
+/// operations (e.g., database-backed tenant registries, remote config
+/// lookups).
+///
+/// Use this when the resolution logic needs to perform I/O that cannot be
+/// done synchronously. The middleware will `.await` the result.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use tenant_core::resolver::AsyncTenantResolver;
+///
+/// struct DatabaseTenantResolver { /* ... */ }
+///
+/// impl AsyncTenantResolver for DatabaseTenantResolver {
+///     fn resolve<'a>(
+///         &'a self,
+///         ctx: &'a dyn ResolutionContext,
+///     ) -> Pin<Box<dyn Future<Output = Result<Option<TenantId>, TenantError>> + Send + 'a>> {
+///         Box::pin(async move {
+///             let header = ctx.header("x-tenant-id").unwrap_or_default();
+///             let tenant = self.lookup_in_db(header).await?;
+///             Ok(tenant)
+///         })
+///     }
+/// }
+/// ```
+pub trait AsyncTenantResolver: Send + Sync + 'static {
+    /// Asynchronously resolve the current tenant.
+    fn resolve<'a>(
+        &'a self,
+        ctx: &'a dyn ResolutionContext,
+    ) -> Pin<Box<dyn Future<Output = Result<Option<TenantId>, TenantError>> + Send + 'a>>;
+
+    /// Optional name for logging / diagnostics.
+    fn name(&self) -> &str {
+        std::any::type_name::<Self>()
+    }
+}
+
+/// Blanket implementation: every sync `TenantResolver` is also an
+/// `AsyncTenantResolver`.
+impl<T: TenantResolver> AsyncTenantResolver for T {
+    fn resolve<'a>(
+        &'a self,
+        ctx: &'a dyn ResolutionContext,
+    ) -> Pin<Box<dyn Future<Output = Result<Option<TenantId>, TenantError>> + Send + 'a>> {
+        Box::pin(std::future::ready(TenantResolver::resolve(self, ctx)))
+    }
+
+    fn name(&self) -> &str {
+        TenantResolver::name(self)
     }
 }

@@ -10,10 +10,10 @@
 //!
 //! Requires Docker to be running.
 
+use axum::Router;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::routing::{get, post};
-use axum::Router;
 use sea_orm::{
     ActiveModelTrait, ConnectOptions, ConnectionTrait, Database, DatabaseConnection, DbBackend,
     EntityTrait, Schema, Set, Statement,
@@ -28,8 +28,8 @@ use tenant_sea_orm::{
     DatabasePerTenantProvider, DiscriminatorProvider, SchemaPerTenantProvider, TenantAware,
     TenantConnectionProvider, TenantDatabaseMapping, TenantFilter, TenantSchemaMapping,
 };
-use testcontainers::runners::AsyncRunner;
 use testcontainers::ContainerAsync;
+use testcontainers::runners::AsyncRunner;
 use testcontainers_modules::postgres::Postgres;
 use tokio::net::TcpListener;
 

@@ -12,19 +12,18 @@
 //!   the tenant and injects `TenantId` into request extensions.
 //! - [`CurrentTenant`] — Axum extractor for the resolved `TenantId`.
 
+pub mod claims;
 pub mod config;
 pub mod context;
 pub mod extractor;
+pub mod metrics;
 pub mod middleware;
-#[cfg(feature = "oidc")]
-pub mod oidc;
 pub mod resolver;
 
+pub use claims::{ClaimsTenantResolver, JwtClaims};
 pub use context::HttpResolutionContext;
-pub use extractor::{CurrentTenant, TenantRejection};
+pub use extractor::{CurrentTenant, TenantContext, TenantRejection};
 pub use middleware::TenantLayer;
-#[cfg(feature = "oidc")]
-pub use oidc::OidcTenantResolver;
 pub use resolver::{
     CookieTenantResolver, DefaultTenantResolver, HeaderTenantResolver, JwtTenantResolver,
     PathTenantResolver, QueryParamTenantResolver, SubdomainTenantResolver,
@@ -33,5 +32,5 @@ pub use resolver::{
 // Re-export core types users commonly need
 pub use tenant_core::{
     CompositeTenantResolver, MultiTenancyStrategy, ResolutionContext, ResolutionContextExt,
-    TenantContext, TenantError, TenantId, TenantResolver,
+    TenantError, TenantId, TenantResolver,
 };

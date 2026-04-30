@@ -27,9 +27,9 @@ fn tenant_id_rejects_whitespace_only() {
 
 #[test]
 fn tenant_id_preserves_whitespace_around_content() {
-    // Whitespace-padded but contains content — valid per current impl
+    // Whitespace-padded but contains content — trimmed to "acme"
     let id = TenantId::new("  acme  ").unwrap();
-    assert_eq!(id.as_str(), "  acme  ");
+    assert_eq!(id.as_str(), "acme");
 }
 
 #[test]
@@ -307,6 +307,59 @@ fn config_builder_partial_uses_defaults() {
     assert!(config.enabled); // default
     assert_eq!(config.strategy, MultiTenancyStrategy::Schema);
     assert!(config.default_tenant.is_none()); // default
+}
+
+// ─── TenantId trimming & deserialization ─────────────────────────────
+
+#[test]
+fn tenant_id_trims_leading_whitespace() {
+    let id = TenantId::new("  hello").unwrap();
+    assert_eq!(id.as_str(), "hello");
+}
+
+#[test]
+fn tenant_id_trims_trailing_whitespace() {
+    let id = TenantId::new("hello  ").unwrap();
+    assert_eq!(id.as_str(), "hello");
+}
+
+#[test]
+fn tenant_id_trims_mixed_whitespace() {
+    let id = TenantId::new("\t tenant \n").unwrap();
+    assert_eq!(id.as_str(), "tenant");
+}
+
+#[test]
+fn tenant_id_deserialize_valid() {
+    let id: TenantId = serde_json::from_str("\"acme\"").unwrap();
+    assert_eq!(id.as_str(), "acme");
+}
+
+#[test]
+fn tenant_id_deserialize_trims() {
+    let id: TenantId = serde_json::from_str("\"  acme  \"").unwrap();
+    assert_eq!(id.as_str(), "acme");
+}
+
+#[test]
+fn tenant_id_deserialize_rejects_empty() {
+    let result: Result<TenantId, _> = serde_json::from_str("\"\"");
+    assert!(result.is_err());
+}
+
+#[test]
+fn tenant_id_deserialize_rejects_whitespace_only() {
+    let result: Result<TenantId, _> = serde_json::from_str("\"   \"");
+    assert!(result.is_err());
+}
+
+#[test]
+fn tenant_id_serialize_roundtrip_after_trim() {
+    let id = TenantId::new("  spaces  ").unwrap();
+    let json = serde_json::to_string(&id).unwrap();
+    assert_eq!(json, "\"spaces\"");
+    let deserialized: TenantId = serde_json::from_str(&json).unwrap();
+    assert_eq!(deserialized, id);
 }
 
 #[test]

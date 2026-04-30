@@ -927,3 +927,445 @@ async fn different_tenants_isolated() {
         .unwrap();
     assert_eq!(body, "tenant:tenant-b");
 }
+
+// ─── Subdomain resolver edge cases ───────────────────────────────────
+
+#[tokio::test]
+async fn subdomain_resolver_rejects_bare_domain() {
+    // "example.com" has only 2 segments — should NOT resolve
+    let resolver = CompositeTenantResolver::new().add(SubdomainTenantResolver);
+    let app = test_app(TenantLayer::new(resolver));
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/hello")
+                .header("host", "example.com")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn subdomain_resolver_rejects_localhost() {
+    let resolver = CompositeTenantResolver::new().add(SubdomainTenantResolver);
+    let app = test_app(TenantLayer::new(resolver));
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/hello")
+                .header("host", "localhost")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn subdomain_resolver_rejects_localhost_with_port() {
+    let resolver = CompositeTenantResolver::new().add(SubdomainTenantResolver);
+    let app = test_app(TenantLayer::new(resolver));
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/hello")
+                .header("host", "localhost:3000")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn subdomain_resolver_resolves_deep_subdomain() {
+    // "tenant.us-east.example.com" — 4 segments, first is tenant
+    let resolver = CompositeTenantResolver::new().add(SubdomainTenantResolver);
+    let app = test_app(TenantLayer::new(resolver));
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/hello")
+                .header("host", "acme.us-east.example.com")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(body, "tenant:acme");
+}
+
+// ─── TenantId trimming in resolvers ──────────────────────────────────
+
+#[tokio::test]
+async fn header_resolver_trims_whitespace() {
+    let app = test_app(TenantLayer::new(HeaderTenantResolver::default()));
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/hello")
+                .header("X-Tenant-Id", "  acme  ")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(body, "tenant:acme");
+}
+
+#[tokio::test]
+async fn header_resolver_rejects_whitespace_only_value() {
+    let app = test_app(TenantLayer::new(HeaderTenantResolver::default()));
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/hello")
+                .header("X-Tenant-Id", "   ")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+// ─── JWT with numeric claim ──────────────────────────────────────────
+
+#[tokio::test]
+async fn jwt_resolver_numeric_claim_value() {
+    let jwt = make_jwt(r#"{"sub":"user1","tenant":12345,"iat":1234567890}"#);
+    let resolver = CompositeTenantResolver::new().add(JwtTenantResolver::default());
+    let app = test_app(TenantLayer::new(resolver));
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/hello")
+                .header(header::AUTHORIZATION, format!("Bearer {jwt}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(body, "tenant:12345");
+}
+
+// ─── Claims-based resolution tests ──────────────────────────────────────────
+
+#[tokio::test]
+async fn claims_based_resolution_from_extensions() {
+    use tenant_axum::claims::JwtClaims;
+
+    let layer = TenantLayer::new(HeaderTenantResolver::default()).with_claims("tenant_id");
+    let app = test_app(layer);
+
+    // Simulate an auth middleware inserting JwtClaims into extensions
+    let claims = serde_json::json!({ "tenant_id": "acme", "sub": "user1" });
+    let mut req = Request::builder()
+        .uri("/hello")
+        .body(Body::empty())
+        .unwrap();
+    req.extensions_mut().insert(JwtClaims::new(claims));
+
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(body, "tenant:acme");
+}
+
+#[tokio::test]
+async fn claims_based_resolution_falls_back_to_resolver_chain() {
+    let layer = TenantLayer::new(HeaderTenantResolver::default()).with_claims("tenant_id");
+    let app = test_app(layer);
+
+    // No JwtClaims in extensions — should fall back to header resolver
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/hello")
+                .header("X-Tenant-ID", "fallback-tenant")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(body, "tenant:fallback-tenant");
+}
+
+#[tokio::test]
+async fn claims_based_resolution_missing_claim_falls_back() {
+    use tenant_axum::claims::JwtClaims;
+
+    let layer = TenantLayer::new(HeaderTenantResolver::default()).with_claims("tenant_id");
+    let app = test_app(layer);
+
+    // JwtClaims present but the claim name is missing — fallback to header
+    let claims = serde_json::json!({ "sub": "user1", "org": "acme" });
+    let mut req = Request::builder()
+        .uri("/hello")
+        .header("X-Tenant-ID", "header-tenant")
+        .body(Body::empty())
+        .unwrap();
+    req.extensions_mut().insert(JwtClaims::new(claims));
+
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(body, "tenant:header-tenant");
+}
+
+#[tokio::test]
+async fn claims_based_resolution_numeric_claim() {
+    use tenant_axum::claims::JwtClaims;
+
+    let layer = TenantLayer::new(HeaderTenantResolver::default()).with_claims("org_id");
+    let app = test_app(layer);
+
+    // Numeric claim should be converted to string
+    let claims = serde_json::json!({ "org_id": 42, "sub": "user1" });
+    let mut req = Request::builder()
+        .uri("/hello")
+        .body(Body::empty())
+        .unwrap();
+    req.extensions_mut().insert(JwtClaims::new(claims));
+
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(body, "tenant:42");
+}
+
+#[tokio::test]
+async fn claims_based_resolution_without_with_claims_ignores_extensions() {
+    use tenant_axum::claims::JwtClaims;
+
+    // No .with_claims() — extensions should be ignored
+    let layer = TenantLayer::new(HeaderTenantResolver::default());
+    let app = test_app(layer);
+
+    let claims = serde_json::json!({ "tenant_id": "claims-tenant" });
+    let mut req = Request::builder()
+        .uri("/hello")
+        .header("X-Tenant-ID", "header-tenant")
+        .body(Body::empty())
+        .unwrap();
+    req.extensions_mut().insert(JwtClaims::new(claims));
+
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    // Should resolve from header, NOT from claims
+    assert_eq!(body, "tenant:header-tenant");
+}
+
+#[tokio::test]
+async fn claims_based_resolution_no_claims_no_fallback_returns_400() {
+    let layer = TenantLayer::new(HeaderTenantResolver::default()).with_claims("tenant_id");
+    let app = test_app(layer);
+
+    // No JwtClaims, no header → 400
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/hello")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+// ─── Skip paths tests ───────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn skip_paths_bypasses_tenant_resolution() {
+    let layer = TenantLayer::new(HeaderTenantResolver::default())
+        .with_skip_paths(vec!["/health", "/ready"]);
+
+    let app = Router::new()
+        .route("/health", get(|| async { "ok" }))
+        .route("/ready", get(|| async { "ok" }))
+        .route("/api", get(handler))
+        .layer(layer);
+
+    // /health should pass without tenant header
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(body, "ok");
+
+    // /ready should also pass without tenant header
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/ready")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // /api without tenant should still fail
+    let resp = app
+        .oneshot(Request::builder().uri("/api").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn skip_paths_prefix_matching() {
+    let layer = TenantLayer::new(HeaderTenantResolver::default()).with_skip_paths(vec!["/public/"]);
+
+    let app = Router::new()
+        .route("/public/docs", get(|| async { "docs" }))
+        .route("/api", get(handler))
+        .layer(layer);
+
+    // /public/docs should match prefix "/public/"
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/public/docs")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // /api still requires tenant
+    let resp = app
+        .oneshot(Request::builder().uri("/api").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+// ─── Metrics layer tests ────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn metrics_layer_tracks_resolution_outcomes() {
+    use tenant_axum::metrics::MetricsTenantLayer;
+
+    let tenant_layer = TenantLayer::new(HeaderTenantResolver::default());
+    let metrics_layer = MetricsTenantLayer::new(tenant_layer);
+    let metrics = metrics_layer.metrics();
+
+    let app = Router::new()
+        .route("/hello", get(handler))
+        .layer(metrics_layer);
+
+    // Successful resolution
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/hello")
+                .header("X-Tenant-ID", "acme")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Failed resolution (no header)
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/hello")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+    let snap = metrics.snapshot();
+    assert_eq!(snap.requests_total, 2);
+    assert_eq!(snap.resolved_total, 1);
+    assert_eq!(snap.missing_total, 1);
+    assert_eq!(snap.errors_total, 0);
+}
+
+// ─── AsyncTenantResolver tests ──────────────────────────────────────────────
+
+#[tokio::test]
+async fn async_resolver_blanket_impl_works() {
+    use tenant_core::resolver::{AsyncTenantResolver, ResolutionContext};
+
+    struct SimpleCtx;
+    impl ResolutionContext for SimpleCtx {
+        fn header(&self, name: &str) -> Option<&str> {
+            if name == "X-Tenant-Id" {
+                Some("async-tenant")
+            } else {
+                None
+            }
+        }
+    }
+
+    let resolver = HeaderTenantResolver::default();
+    // Use the AsyncTenantResolver blanket impl
+    let result = AsyncTenantResolver::resolve(&resolver, &SimpleCtx).await;
+    assert!(result.is_ok());
+    let tenant = result.unwrap();
+    assert!(tenant.is_some());
+    assert_eq!(tenant.unwrap().as_str(), "async-tenant");
+}

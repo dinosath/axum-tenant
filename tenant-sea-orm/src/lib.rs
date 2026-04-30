@@ -20,12 +20,18 @@ pub mod connection;
 pub mod database;
 pub mod discriminator;
 pub mod filter;
+pub mod middleware;
+pub mod provisioning;
+pub mod rls;
 pub mod schema;
 
 pub use connection::TenantConnectionProvider;
 pub use database::{DatabasePerTenantProvider, TenantDatabaseMapping};
 pub use discriminator::DiscriminatorProvider;
 pub use filter::{TenantAware, TenantFilter};
+pub use middleware::{TenantDb, TenantDbLayer};
+pub use provisioning::TenantProvisioner;
+pub use rls::RlsManager;
 pub use schema::{SchemaPerTenantProvider, TenantSchemaMapping};
 
 // Re-export core types users commonly need

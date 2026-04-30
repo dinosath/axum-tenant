@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 description = "Core multi-tenancy traits and types — framework agnostic"
 license = "MIT"
+repository = "https://github.com/pehlivanoglu/axum-tenant"
+keywords = ["multi-tenancy", "tenant", "saas"]
+categories = ["web-programming"]
+rust-version = "1.75"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

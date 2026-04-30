@@ -7,8 +7,8 @@
 //!
 //! Requires Docker to be running.
 
-use axum::routing::get;
 use axum::Router;
+use axum::routing::get;
 use serde_json::Value;
 use std::time::Duration;
 use tenant_axum::config::{HttpTenantConfig, HttpTenantStrategy};

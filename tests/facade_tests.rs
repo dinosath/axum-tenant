@@ -1,7 +1,7 @@
+use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::routing::get;
-use axum::Router;
 use tower::ServiceExt;
 
 /// Tests that the top-level `axum-tenant` crate correctly re-exports

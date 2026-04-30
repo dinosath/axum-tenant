@@ -5,10 +5,10 @@
 //! curl -H "X-Tenant-Id: acme" http://localhost:3000/hello
 //! ```
 
-use axum::{routing::get, Router};
+use axum::{Router, routing::get};
 use tenant_axum::{
-    config::{HttpTenantConfig, HttpTenantStrategy},
     CurrentTenant, TenantLayer,
+    config::{HttpTenantConfig, HttpTenantStrategy},
 };
 
 async fn hello(CurrentTenant(tenant): CurrentTenant) -> String {

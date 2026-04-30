@@ -1,19 +1,20 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-/// Identifies a tenant. Wraps a validated, non-empty string.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// Identifies a tenant. Wraps a validated, non-empty, trimmed string.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct TenantId(String);
 
 impl TenantId {
     /// Create a new `TenantId`. Returns `None` if the value is empty or
-    /// contains only whitespace.
+    /// contains only whitespace. The value is trimmed before storage.
     pub fn new(value: impl Into<String>) -> Option<Self> {
         let s = value.into();
-        if s.trim().is_empty() {
+        let trimmed = s.trim().to_string();
+        if trimmed.is_empty() {
             None
         } else {
-            Some(Self(s))
+            Some(Self(trimmed))
         }
     }
 
@@ -23,6 +24,17 @@ impl TenantId {
 
     pub fn into_inner(self) -> String {
         self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for TenantId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        TenantId::new(s)
+            .ok_or_else(|| serde::de::Error::custom("TenantId cannot be empty or whitespace-only"))
     }
 }
 

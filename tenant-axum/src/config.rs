@@ -54,6 +54,13 @@ pub struct HttpTenantConfig {
     /// JWT claim name for the `Jwt` strategy.
     pub jwt_claim_name: String,
 
+    /// Whether to validate the JWT (signature, expiry) when using the `Jwt`
+    /// strategy. When `false` (default), the token payload is base64-decoded
+    /// without cryptographic verification — rely on upstream auth middleware.
+    /// When `true`, `jsonwebtoken` performs full validation (requires a
+    /// crypto provider feature like `aws_lc_rs`).
+    pub jwt_validate: bool,
+
     /// Cookie name for the `Cookie` strategy.
     pub cookie_name: String,
 
@@ -76,6 +83,7 @@ impl Default for HttpTenantConfig {
             strategies: vec![HttpTenantStrategy::Header],
             header_name: "X-Tenant-Id".into(),
             jwt_claim_name: "tenant".into(),
+            jwt_validate: false,
             cookie_name: "tenant_cookie".into(),
             path_segment_index: 0,
             query_param_name: "tenant_id".into(),
@@ -97,6 +105,7 @@ pub struct HttpTenantConfigBuilder {
     strategies: Vec<HttpTenantStrategy>,
     header_name: Option<String>,
     jwt_claim_name: Option<String>,
+    jwt_validate: Option<bool>,
     cookie_name: Option<String>,
     path_segment_index: Option<usize>,
     query_param_name: Option<String>,
@@ -132,6 +141,17 @@ impl HttpTenantConfigBuilder {
         self
     }
 
+    /// Whether to validate the JWT cryptographically.
+    ///
+    /// - `false` (default): payload is base64-decoded without signature
+    ///   verification. Suitable when an upstream auth middleware has already
+    ///   validated the token.
+    /// - `true`: uses `jsonwebtoken` for full validation (signature, expiry).
+    pub fn jwt_validate(mut self, validate: bool) -> Self {
+        self.jwt_validate = Some(validate);
+        self
+    }
+
     pub fn cookie_name(mut self, name: impl Into<String>) -> Self {
         self.cookie_name = Some(name.into());
         self
@@ -163,6 +183,7 @@ impl HttpTenantConfigBuilder {
             },
             header_name: self.header_name.unwrap_or(defaults.header_name),
             jwt_claim_name: self.jwt_claim_name.unwrap_or(defaults.jwt_claim_name),
+            jwt_validate: self.jwt_validate.unwrap_or(defaults.jwt_validate),
             cookie_name: self.cookie_name.unwrap_or(defaults.cookie_name),
             path_segment_index: self
                 .path_segment_index
@@ -198,9 +219,10 @@ impl HttpTenantConfig {
                 HttpTenantStrategy::Header => {
                     resolver.add(HeaderTenantResolver::new(&self.header_name))
                 }
-                HttpTenantStrategy::Jwt => {
-                    resolver.add(JwtTenantResolver::new(&self.jwt_claim_name))
-                }
+                HttpTenantStrategy::Jwt => resolver.add(JwtTenantResolver::with_validate(
+                    &self.jwt_claim_name,
+                    self.jwt_validate,
+                )),
                 HttpTenantStrategy::Cookie => {
                     resolver.add(CookieTenantResolver::new(&self.cookie_name))
                 }

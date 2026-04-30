@@ -17,6 +17,7 @@ pub use config::TenantConfig;
 pub use context::TenantContext;
 pub use error::TenantError;
 pub use resolver::{
-    CompositeTenantResolver, ResolutionContext, ResolutionContextExt, TenantResolver,
+    AsyncTenantResolver, CompositeTenantResolver, ResolutionContext, ResolutionContextExt,
+    TenantResolver,
 };
 pub use tenant::{MultiTenancyStrategy, TenantId};

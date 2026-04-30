@@ -85,6 +85,10 @@ impl TenantResolver for PathTenantResolver {
 
 /// Resolves tenant from the `Host` header subdomain.
 /// E.g. `tenant1.example.com` → `tenant1`.
+///
+/// Requires at least two domain segments (e.g. `sub.example.com`). Bare
+/// domains like `localhost` or `example.com` (single segment before first dot)
+/// without a further subdomain will not resolve.
 #[derive(Debug, Clone)]
 pub struct SubdomainTenantResolver;
 
@@ -96,11 +100,13 @@ impl TenantResolver for SubdomainTenantResolver {
         };
         // Strip port
         let host = host.split(':').next().unwrap_or(host);
-        let subdomain = host.split('.').next();
-        match subdomain {
-            Some(s) => Ok(TenantId::new(s)),
-            None => Ok(None),
+        let parts: Vec<&str> = host.split('.').collect();
+        // Require at least 3 segments (subdomain.domain.tld) to extract
+        // a meaningful subdomain. e.g. "acme.example.com" → "acme"
+        if parts.len() < 3 {
+            return Ok(None);
         }
+        Ok(TenantId::new(parts[0]))
     }
 
     fn name(&self) -> &str {
@@ -227,11 +233,13 @@ impl TenantResolver for CookieTenantResolver {
 
 /// Resolves tenant from a JWT Bearer token claim.
 ///
-/// Decodes the JWT payload and extracts the configured claim. By default,
-/// signature verification is **disabled** (the assumption is that a prior
-/// authentication middleware has already verified the token). Use
-/// [`JwtTenantResolver::with_validation`] to supply custom validation
-/// (e.g. with a decoding key for signature verification).
+/// Supports two modes controlled by `validate`:
+///
+/// - **`validate = false`** (default): Base64-decodes the JWT payload
+///   without cryptographic verification. Use when an upstream auth
+///   middleware has already validated the token.
+/// - **`validate = true`**: Uses `jsonwebtoken` for full validation
+///   (signature, expiry). Requires proper crypto provider features.
 ///
 /// Corresponds to the `Jwt` strategy in `HttpTenantConfig`.
 ///
@@ -239,10 +247,14 @@ impl TenantResolver for CookieTenantResolver {
 #[derive(Debug, Clone)]
 pub struct JwtTenantResolver {
     claim_name: String,
+    validate: bool,
     validation: jsonwebtoken::Validation,
 }
 
 impl JwtTenantResolver {
+    /// Create a resolver that base64-decodes the JWT payload without
+    /// validation. Assumes upstream auth middleware has verified the token.
+    #[allow(deprecated)]
     pub fn new(claim_name: impl Into<String>) -> Self {
         let mut validation = jsonwebtoken::Validation::default();
         validation.insecure_disable_signature_validation();
@@ -251,18 +263,46 @@ impl JwtTenantResolver {
         validation.required_spec_claims.clear();
         Self {
             claim_name: claim_name.into(),
+            validate: false,
+            validation,
+        }
+    }
+
+    /// Create a resolver with explicit validate flag.
+    ///
+    /// - `validate = false`: base64-decode only (no crypto).
+    /// - `validate = true`: full `jsonwebtoken` validation with disabled
+    ///   signature check (use [`with_validation`](Self::with_validation)
+    ///   for custom settings).
+    #[allow(deprecated)]
+    pub fn with_validate(claim_name: impl Into<String>, validate: bool) -> Self {
+        let mut validation = jsonwebtoken::Validation::default();
+        if !validate {
+            validation.insecure_disable_signature_validation();
+            validation.validate_aud = false;
+            validation.validate_exp = false;
+            validation.required_spec_claims.clear();
+        } else {
+            // When validating, still disable aud by default (user can
+            // override via with_validation)
+            validation.validate_aud = false;
+        }
+        Self {
+            claim_name: claim_name.into(),
+            validate,
             validation,
         }
     }
 
     /// Create a resolver with custom `jsonwebtoken::Validation` settings.
-    /// Useful for enabling signature verification, audience checks, etc.
+    /// Implicitly enables validation mode.
     pub fn with_validation(
         claim_name: impl Into<String>,
         validation: jsonwebtoken::Validation,
     ) -> Self {
         Self {
             claim_name: claim_name.into(),
+            validate: true,
             validation,
         }
     }
@@ -288,12 +328,18 @@ impl TenantResolver for JwtTenantResolver {
             None => return Ok(None),
         };
 
-        let key = jsonwebtoken::DecodingKey::from_secret(&[]);
-        let token_data: jsonwebtoken::TokenData<serde_json::Value> =
-            jsonwebtoken::decode(token, &key, &self.validation)
-                .map_err(|e| TenantError::InvalidTenant(format!("Failed to decode JWT: {e}")))?;
+        let claims: serde_json::Value = if self.validate {
+            let key = jsonwebtoken::DecodingKey::from_secret(&[]);
+            let token_data: jsonwebtoken::TokenData<serde_json::Value> =
+                jsonwebtoken::decode(token, &key, &self.validation).map_err(|e| {
+                    TenantError::InvalidTenant(format!("JWT validation failed: {e}"))
+                })?;
+            token_data.claims
+        } else {
+            decode_jwt_payload_base64(token)?
+        };
 
-        let claim_value = token_data.claims.get(&self.claim_name).map(|v| match v {
+        let claim_value = claims.get(&self.claim_name).map(|v| match v {
             serde_json::Value::String(s) => s.clone(),
             other => other.to_string(),
         });
@@ -307,4 +353,23 @@ impl TenantResolver for JwtTenantResolver {
     fn name(&self) -> &str {
         "JwtTenantResolver"
     }
+}
+
+/// Base64-decode the JWT payload (second dot-segment) without validation.
+fn decode_jwt_payload_base64(token: &str) -> Result<serde_json::Value, TenantError> {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+
+    let parts: Vec<&str> = token.splitn(3, '.').collect();
+    if parts.len() < 2 {
+        return Err(TenantError::InvalidTenant(
+            "Invalid JWT: expected header.payload".into(),
+        ));
+    }
+
+    let payload_bytes = URL_SAFE_NO_PAD
+        .decode(parts[1])
+        .map_err(|e| TenantError::InvalidTenant(format!("Invalid JWT payload encoding: {e}")))?;
+
+    serde_json::from_slice(&payload_bytes)
+        .map_err(|e| TenantError::InvalidTenant(format!("Invalid JWT payload JSON: {e}")))
 }

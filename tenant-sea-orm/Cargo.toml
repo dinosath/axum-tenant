@@ -4,9 +4,16 @@ version = "0.1.0"
 edition = "2021"
 description = "SeaORM integration for tenant-core — connection providers and tenant-aware query filtering"
 license = "MIT"
+repository = "https://github.com/pehlivanoglu/axum-tenant"
+keywords = ["multi-tenancy", "sea-orm", "database", "tenant"]
+categories = ["database"]
+rust-version = "1.75"
 
 [dependencies]
 tenant-core = { path = "../tenant-core" }
 sea-orm = { version = "1", features = ["runtime-tokio-rustls"] }
 dashmap = "6"
 tracing = "0.1"
+axum = { version = "0.8" }
+tower-layer = "0.3"
+tower-service = "0.3"

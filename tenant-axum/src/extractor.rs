@@ -2,7 +2,78 @@ use axum::extract::FromRequestParts;
 use axum::response::{IntoResponse, Response};
 use http::request::Parts;
 use tenant_core::error::TenantError;
-use tenant_core::tenant::TenantId;
+use tenant_core::tenant::{MultiTenancyStrategy, TenantId};
+
+/// Rich tenant context inserted into request extensions by the middleware.
+///
+/// Contains the resolved tenant identity plus metadata about *how* it was
+/// resolved. Use this when handlers need more than just the tenant ID.
+///
+/// ```rust,ignore
+/// use tenant_axum::TenantContext;
+///
+/// async fn handler(ctx: TenantContext) -> String {
+///     format!(
+///         "Tenant {} resolved via {} (strategy: {:?})",
+///         ctx.tenant_id(),
+///         ctx.resolved_by(),
+///         ctx.strategy(),
+///     )
+/// }
+/// ```
+#[derive(Debug, Clone)]
+pub struct TenantContext {
+    tenant_id: TenantId,
+    /// Name of the resolver that produced the tenant (e.g. "HeaderTenantResolver").
+    resolved_by: String,
+    /// The multi-tenancy strategy in effect, if known.
+    strategy: Option<MultiTenancyStrategy>,
+}
+
+impl TenantContext {
+    /// Create a new `TenantContext`.
+    pub fn new(
+        tenant_id: TenantId,
+        resolved_by: impl Into<String>,
+        strategy: Option<MultiTenancyStrategy>,
+    ) -> Self {
+        Self {
+            tenant_id,
+            resolved_by: resolved_by.into(),
+            strategy,
+        }
+    }
+
+    /// The resolved tenant identifier.
+    pub fn tenant_id(&self) -> &TenantId {
+        &self.tenant_id
+    }
+
+    /// Name of the resolver or mechanism that produced the tenant.
+    pub fn resolved_by(&self) -> &str {
+        &self.resolved_by
+    }
+
+    /// The multi-tenancy strategy in effect (if configured).
+    pub fn strategy(&self) -> Option<MultiTenancyStrategy> {
+        self.strategy
+    }
+}
+
+impl<S> FromRequestParts<S> for TenantContext
+where
+    S: Send + Sync,
+{
+    type Rejection = TenantRejection;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        parts
+            .extensions
+            .get::<TenantContext>()
+            .cloned()
+            .ok_or(TenantRejection(TenantError::MissingTenant))
+    }
+}
 
 /// Axum extractor that yields the resolved [`TenantId`] from request
 /// extensions.
@@ -62,9 +133,8 @@ where
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         parts
             .extensions
-            .get::<TenantId>()
-            .cloned()
-            .map(CurrentTenant)
+            .get::<TenantContext>()
+            .map(|ctx| CurrentTenant(ctx.tenant_id().clone()))
             .ok_or(TenantRejection(TenantError::MissingTenant))
     }
 }
