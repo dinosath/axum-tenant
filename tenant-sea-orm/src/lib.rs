@@ -16,6 +16,9 @@
 //!
 //! Bridges the core `TenantContext` to the ORM layer's multi-tenancy API.
 
+#[cfg(feature = "sea-orm-2")]
+extern crate sea_orm_next as sea_orm;
+
 pub mod connection;
 pub mod database;
 pub mod discriminator;

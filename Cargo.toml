@@ -21,6 +21,7 @@ readme = "README.md"
 default = ["axum", "sea-orm"]
 axum = ["dep:tenant-axum"]
 sea-orm = ["dep:tenant-sea-orm"]
+sea-orm-2 = ["dep:tenant-sea-orm", "tenant-sea-orm/sea-orm-2"]
 full = ["axum", "sea-orm"]
 
 [dependencies]

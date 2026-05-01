@@ -9,9 +9,15 @@ keywords = ["multi-tenancy", "sea-orm", "database", "tenant"]
 categories = ["database"]
 rust-version = "1.75"
 
+[features]
+default = ["sea-orm-1"]
+sea-orm-1 = ["dep:sea-orm"]
+sea-orm-2 = ["dep:sea-orm-next"]
+
 [dependencies]
 tenant-core = { path = "../tenant-core" }
-sea-orm = { version = "1", features = ["runtime-tokio-rustls"] }
+sea-orm = { version = "1", features = ["runtime-tokio-rustls"], optional = true }
+sea-orm-next = { package = "sea-orm", version = "2.0.0-rc.38", features = ["runtime-tokio-rustls"], optional = true }
 dashmap = "6"
 tracing = "0.1"
 axum = { version = "0.8" }

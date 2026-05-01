@@ -58,6 +58,13 @@ axum-tenant (facade crate — feature-gated re-exports)
 axum-tenant = { version = "0.1", features = ["axum", "sea-orm"] }
 ```
 
+To use **SeaORM 2.0** (currently `2.0.0-rc.38`) instead of SeaORM 1.x:
+
+```toml
+[dependencies]
+axum-tenant = { version = "0.1", features = ["axum", "sea-orm-2"] }
+```
+
 Or depend on individual crates:
 
 ```toml
@@ -224,7 +231,8 @@ let products = TenantFilter::filter(Entity::find(), &tenant)
 | Feature | Default | Description |
 |---|---|---|
 | `axum` | ✓ | Axum middleware, extractors, HTTP resolvers |
-| `sea-orm` | ✓ | SeaORM connection providers and query filtering |
+| `sea-orm` | ✓ | SeaORM 1.x connection providers and query filtering |
+| `sea-orm-2` | | SeaORM 2.0.0-rc.38 support (mutually exclusive with `sea-orm`) |
 | `full` | | Enables all features |
 
 ## Running the Examples
