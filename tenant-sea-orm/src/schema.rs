@@ -1,8 +1,10 @@
 use std::future::Future;
 use std::time::{Duration, Instant};
 
+use crate::compat;
 use crate::connection::TenantConnectionProvider;
 use dashmap::DashMap;
+#[allow(unused_imports)]
 use sea_orm::{
     ConnectOptions, ConnectionTrait, Database, DatabaseConnection, DbBackend, Statement,
 };
@@ -99,10 +101,12 @@ impl<M: TenantSchemaMapping> SchemaPerTenantProvider<M> {
             // prefer `with_url()` constructor)
             let backend = self.shared_connection.get_database_backend();
             let sql = schema_sql(backend, schema)?;
-            self.shared_connection
-                .execute(Statement::from_string(backend, sql))
-                .await
-                .map_err(|e| TenantError::SchemaError(e.to_string()))?;
+            compat::exec(
+                &self.shared_connection,
+                Statement::from_string(backend, sql),
+            )
+            .await
+            .map_err(|e| TenantError::SchemaError(e.to_string()))?;
             self.shared_connection.clone()
         } else {
             let mut opts = ConnectOptions::new(&self.base_url);
@@ -113,7 +117,7 @@ impl<M: TenantSchemaMapping> SchemaPerTenantProvider<M> {
 
             let backend = conn.get_database_backend();
             let sql = schema_sql(backend, schema)?;
-            conn.execute(Statement::from_string(backend, sql))
+            compat::exec(&conn, Statement::from_string(backend, sql))
                 .await
                 .map_err(|e| TenantError::SchemaError(e.to_string()))?;
             conn
@@ -152,6 +156,9 @@ fn schema_sql(backend: DbBackend, schema: &str) -> Result<String, TenantError> {
         DbBackend::MySql => Ok(format!("USE {}", quoted)),
         DbBackend::Sqlite => Err(TenantError::SchemaError(
             "SQLite does not support schemas".into(),
+        )),
+        _ => Err(TenantError::SchemaError(
+            "Unsupported database backend for schema operations".into(),
         )),
     }
 }

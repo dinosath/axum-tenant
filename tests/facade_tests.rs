@@ -75,6 +75,7 @@ async fn facade_reexports_axum_module() {
 }
 
 #[tokio::test]
+#[cfg(any(feature = "sea-orm", feature = "sea-orm-2"))]
 async fn facade_reexports_orm_module() {
     // Verify SeaORM types are accessible through the facade
     use axum_tenant::orm::TenantFilter;

@@ -10,6 +10,9 @@
 //!
 //! Requires Docker to be running.
 
+// These tests use sea-orm v1 directly; only compile with the sea-orm (v1) feature.
+#![cfg(feature = "sea-orm")]
+
 use axum::Router;
 use axum::extract::State;
 use axum::http::StatusCode;

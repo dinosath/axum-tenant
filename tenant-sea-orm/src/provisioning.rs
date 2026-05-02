@@ -17,8 +17,11 @@
 //! provisioner.create_database("tenant_acme_db").await?;
 //! ```
 
+#[allow(unused_imports)]
 use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, Statement};
 use tenant_core::error::TenantError;
+
+use crate::compat;
 
 /// Validates a SQL identifier (schema/database name) is safe.
 fn validate_identifier(name: &str) -> Result<(), TenantError> {
@@ -71,10 +74,14 @@ impl TenantProvisioner {
                     "SQLite does not support schema provisioning".into(),
                 ));
             }
+            _ => {
+                return Err(TenantError::SchemaError(
+                    "Unsupported database backend".into(),
+                ));
+            }
         };
 
-        self.admin_conn
-            .execute(Statement::from_string(backend, sql))
+        compat::exec(&self.admin_conn, Statement::from_string(backend, sql))
             .await
             .map_err(|e| TenantError::SchemaError(format!("Failed to create schema: {e}")))?;
 
@@ -101,10 +108,14 @@ impl TenantProvisioner {
                     "SQLite does not support schema provisioning".into(),
                 ));
             }
+            _ => {
+                return Err(TenantError::SchemaError(
+                    "Unsupported database backend".into(),
+                ));
+            }
         };
 
-        self.admin_conn
-            .execute(Statement::from_string(backend, sql))
+        compat::exec(&self.admin_conn, Statement::from_string(backend, sql))
             .await
             .map_err(|e| TenantError::SchemaError(format!("Failed to drop schema: {e}")))?;
 
@@ -128,10 +139,14 @@ impl TenantProvisioner {
                     "SQLite databases are file-based; create the file directly".into(),
                 ));
             }
+            _ => {
+                return Err(TenantError::ConfigError(
+                    "Unsupported database backend".into(),
+                ));
+            }
         };
 
-        self.admin_conn
-            .execute(Statement::from_string(backend, sql))
+        compat::exec(&self.admin_conn, Statement::from_string(backend, sql))
             .await
             .map_err(|e| TenantError::ConnectionError(format!("Failed to create database: {e}")))?;
 
@@ -153,10 +168,14 @@ impl TenantProvisioner {
                     "SQLite databases are file-based; delete the file directly".into(),
                 ));
             }
+            _ => {
+                return Err(TenantError::ConfigError(
+                    "Unsupported database backend".into(),
+                ));
+            }
         };
 
-        self.admin_conn
-            .execute(Statement::from_string(backend, sql))
+        compat::exec(&self.admin_conn, Statement::from_string(backend, sql))
             .await
             .map_err(|e| TenantError::ConnectionError(format!("Failed to drop database: {e}")))?;
 
@@ -182,11 +201,14 @@ impl TenantProvisioner {
                     "SQLite does not support schemas".into(),
                 ));
             }
+            _ => {
+                return Err(TenantError::SchemaError(
+                    "Unsupported database backend".into(),
+                ));
+            }
         };
 
-        let result = self
-            .admin_conn
-            .query_one(Statement::from_string(backend, sql))
+        let result = compat::query_one(&self.admin_conn, Statement::from_string(backend, sql))
             .await
             .map_err(|e| TenantError::SchemaError(format!("Failed to check schema: {e}")))?;
 
@@ -210,18 +232,27 @@ impl TenantProvisioner {
                     "SQLite does not support schemas".into(),
                 ));
             }
+            _ => {
+                return Err(TenantError::SchemaError(
+                    "Unsupported database backend".into(),
+                ));
+            }
         };
 
-        self.admin_conn
-            .execute(Statement::from_string(backend, switch_sql))
-            .await
-            .map_err(|e| TenantError::SchemaError(format!("Failed to switch schema: {e}")))?;
+        compat::exec(
+            &self.admin_conn,
+            Statement::from_string(backend, switch_sql),
+        )
+        .await
+        .map_err(|e| TenantError::SchemaError(format!("Failed to switch schema: {e}")))?;
 
         // Run the migration
-        self.admin_conn
-            .execute(Statement::from_string(backend, sql.to_owned()))
-            .await
-            .map_err(|e| TenantError::SchemaError(format!("Migration failed: {e}")))?;
+        compat::exec(
+            &self.admin_conn,
+            Statement::from_string(backend, sql.to_owned()),
+        )
+        .await
+        .map_err(|e| TenantError::SchemaError(format!("Migration failed: {e}")))?;
 
         Ok(())
     }

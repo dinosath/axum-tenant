@@ -21,24 +21,32 @@ jobs:
       - run: cargo fmt --all -- --check
 
   clippy:
-    name: Clippy
+    name: Clippy (${{ matrix.features }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        features: ["axum,sea-orm", "axum,sea-orm-2"]
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo clippy -p tenant-core -p tenant-axum -- -D warnings
+      - run: cargo clippy -p axum-tenant --no-default-features --features ${{ matrix.features }} -- -D warnings
 
   build:
-    name: Build
+    name: Build (${{ matrix.features }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        features: ["axum,sea-orm", "axum,sea-orm-2"]
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --workspace --all-features
+      - run: cargo build -p tenant-core -p tenant-axum
+      - run: cargo build -p axum-tenant --no-default-features --features ${{ matrix.features }}
 
   test:
     name: Test
@@ -61,7 +69,13 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --workspace --all-features
+      - run: cargo test -p tenant-core -p tenant-axum
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      - run: cargo test -p axum-tenant --no-default-features --features axum,sea-orm
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      - run: cargo test -p axum-tenant --no-default-features --features axum,sea-orm-2
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
 
@@ -89,7 +103,7 @@ jobs:
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin
       - name: Generate coverage
-        run: cargo tarpaulin --workspace --all-features --out xml --output-dir coverage --skip-clean
+        run: cargo tarpaulin -p tenant-core -p tenant-axum -p tenant-sea-orm -p axum-tenant --out xml --output-dir coverage --skip-clean
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
       - name: Upload to Codecov

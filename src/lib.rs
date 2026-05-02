@@ -31,7 +31,7 @@ pub mod axum {
     pub use tenant_axum::*;
 }
 
-#[cfg(feature = "sea-orm")]
+#[cfg(any(feature = "sea-orm", feature = "sea-orm-2"))]
 pub mod orm {
     //! SeaORM integration — re-exports from `tenant-sea-orm`.
     pub use tenant_sea_orm::*;

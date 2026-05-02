@@ -19,13 +19,17 @@
 #[cfg(feature = "sea-orm-2")]
 extern crate sea_orm_next as sea_orm;
 
+pub(crate) mod compat;
 pub mod connection;
 pub mod database;
 pub mod discriminator;
 pub mod filter;
 pub mod middleware;
+#[allow(unreachable_patterns)]
 pub mod provisioning;
+#[allow(unreachable_patterns)]
 pub mod rls;
+#[allow(unreachable_patterns)]
 pub mod schema;
 
 pub use connection::TenantConnectionProvider;

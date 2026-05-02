@@ -25,9 +25,12 @@
 //! rls.set_tenant(&conn, &tenant_id).await?;
 //! ```
 
+#[allow(unused_imports)]
 use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, Statement};
 use tenant_core::error::TenantError;
 use tenant_core::tenant::TenantId;
+
+use crate::compat;
 
 /// The Postgres session variable used to pass tenant identity to RLS policies.
 pub const RLS_TENANT_VAR: &str = "app.tenant_id";
@@ -72,8 +75,7 @@ impl RlsManager {
 
         let backend = self.admin_conn.get_database_backend();
         for sql in stmts {
-            self.admin_conn
-                .execute(Statement::from_string(backend, sql))
+            compat::exec(&self.admin_conn, Statement::from_string(backend, sql))
                 .await
                 .map_err(|e| TenantError::SchemaError(format!("RLS setup failed: {e}")))?;
         }
@@ -94,8 +96,7 @@ impl RlsManager {
 
         let backend = self.admin_conn.get_database_backend();
         for sql in stmts {
-            self.admin_conn
-                .execute(Statement::from_string(backend, sql))
+            compat::exec(&self.admin_conn, Statement::from_string(backend, sql))
                 .await
                 .map_err(|e| TenantError::SchemaError(format!("RLS disable failed: {e}")))?;
         }
@@ -124,7 +125,7 @@ impl RlsManager {
             RLS_TENANT_VAR,
             tenant.as_str().replace('\'', "''")
         );
-        conn.execute(Statement::from_string(backend, sql))
+        compat::exec(conn, Statement::from_string(backend, sql))
             .await
             .map_err(|e| TenantError::SchemaError(format!("Failed to set RLS tenant: {e}")))?;
         Ok(())
@@ -135,7 +136,7 @@ impl RlsManager {
         Self::check_postgres(conn)?;
         let backend = conn.get_database_backend();
         let sql = format!("RESET {}", RLS_TENANT_VAR);
-        conn.execute(Statement::from_string(backend, sql))
+        compat::exec(conn, Statement::from_string(backend, sql))
             .await
             .map_err(|e| TenantError::SchemaError(format!("Failed to reset RLS tenant: {e}")))?;
         Ok(())
